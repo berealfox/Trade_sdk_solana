@@ -1,7 +1,6 @@
-use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
+use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode, FormatBase64VersionedTransaction};
 use rand::seq::IndexedRandom;
 use reqwest::Client;
-use serde_json::json;
 use std::{sync::Arc, time::Instant};
 
 use std::time::Duration;
@@ -12,10 +11,11 @@ use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
-use crate::{common::SolanaRpcClient, constants::swqos::NEXTBLOCK_TIP_ACCOUNTS};
+use crate::{common::SolanaRpcClient, constants::swqos::BLOX_TIP_ACCOUNTS};
+
 
 #[derive(Clone)]
-pub struct NextBlockClient {
+pub struct BloxrouteClient {
     pub endpoint: String,
     pub auth_token: String,
     pub rpc_client: Arc<SolanaRpcClient>,
@@ -23,7 +23,7 @@ pub struct NextBlockClient {
 }
 
 #[async_trait::async_trait]
-impl SwqosClientTrait for NextBlockClient {
+impl SwqosClientTrait for BloxrouteClient {
     async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         self.send_transaction(trade_type, transaction).await
     }
@@ -33,16 +33,16 @@ impl SwqosClientTrait for NextBlockClient {
     }
 
     fn get_tip_account(&self) -> Result<String> {
-        let tip_account = *NEXTBLOCK_TIP_ACCOUNTS.choose(&mut rand::rng()).or_else(|| NEXTBLOCK_TIP_ACCOUNTS.first()).unwrap();
+        let tip_account = *BLOX_TIP_ACCOUNTS.choose(&mut rand::rng()).or_else(|| BLOX_TIP_ACCOUNTS.first()).unwrap();
         Ok(tip_account.to_string())
     }
 
     fn get_swqos_type(&self) -> SwqosType {
-        SwqosType::NextBlock
+        SwqosType::Bloxroute
     }
 }
 
-impl NextBlockClient {
+impl BloxrouteClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()
@@ -62,27 +62,30 @@ impl NextBlockClient {
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
         println!(" 交易编码base64: {:?}", start_time.elapsed());
 
-        let request_body = serde_json::to_string(&json!({
+        let body = serde_json::json!({
             "transaction": {
-                "content": content
+                "content": content,
             },
-            "frontRunningProtection": false
-        }))?;
+            "frontRunningProtection": false,
+            "useStakedRPCs": true,
+        });
 
-        let response_text = self.http_client.post(&self.endpoint)
-            .body(request_body)
-            .header("Authorization", &self.auth_token)
+        let endpoint = format!("{}/api/v2/submit", self.endpoint);
+        let response_text = self.http_client.post(&endpoint)
+            .body(body.to_string())
             .header("Content-Type", "application/json")
+            .header("Authorization", self.auth_token.clone())
             .send()
             .await?
             .text()
             .await?;
 
+        // 5. 用 `serde_json::from_str()` 解析 JSON，减少 `.json().await?` 额外等待
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" nextblock{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" bloxroute{}提交: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" nextblock{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" bloxroute{}提交失败: {:?}", trade_type, _error);
             }
         }
 
@@ -92,15 +95,46 @@ impl NextBlockClient {
             Err(_) => (),
         }
 
-        println!(" nextblock{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" bloxroute{}确认: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }
 
     pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
-        for transaction in transactions {
-            self.send_transaction(trade_type, transaction).await?;
+        let start_time = Instant::now();
+        println!(" 交易编码base64: {:?}", start_time.elapsed());
+
+        let body = serde_json::json!({
+            "entries":  transactions
+                .iter()
+                .map(|tx| {
+                    serde_json::json!({
+                        "transaction": {
+                            "content": tx.to_base64_string(),
+                        },
+                    })
+                })
+                .collect::<Vec<_>>(),
+        });
+
+        let endpoint = format!("{}/api/v2/submit-batch", self.endpoint);
+        let response_text = self.http_client.post(&endpoint)
+            .body(body.to_string())
+            .header("Content-Type", "application/json")
+            .header("Authorization", self.auth_token.clone())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if response_json.get("result").is_some() {
+                println!(" bloxroute{}提交: {:?}", trade_type, start_time.elapsed());
+            } else if let Some(_error) = response_json.get("error") {
+                eprintln!(" bloxroute{}提交失败: {:?}", trade_type, _error);
+            }
         }
+
         Ok(())
     }
 }

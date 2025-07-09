@@ -6,34 +6,32 @@ use std::sync::Arc;
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::pumpswap::common::get_token_balance;
 use crate::swqos::SwqosClient;
-use crate::trading::{core::params::PumpSwapParams, factory::Protocol, SellParams, TradeFactory};
+use crate::trading::{
+    core::params::RaydiumLaunchpadParams, factory::Protocol, SellParams, TradeFactory,
+};
 
 // Sell tokens to a Pumpswap pool
 pub async fn sell(
     rpc: Arc<SolanaRpcClient>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     amount_token: Option<u64>,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
-    let executor = TradeFactory::create_executor(Protocol::PumpSwap);
+    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
     // 创建PumpFun协议参数
-    let protocol_params = Box::new(PumpSwapParams {
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
+    let protocol_params = Box::new(RaydiumLaunchpadParams {
+        virtual_base: Some(virtual_base),
+        virtual_quote: Some(virtual_quote),
+        real_base_before: Some(real_base_before),
+        real_quote_before: Some(real_quote_before),
         auto_handle_wsol: true,
     });
     // 创建卖出参数
@@ -41,7 +39,7 @@ pub async fn sell(
         rpc: Some(rpc.clone()),
         payer: payer.clone(),
         mint,
-        creator,
+        creator: Pubkey::default(),
         amount_token: amount_token,
         slippage_basis_points: slippage_basis_points,
         priority_fee: priority_fee.clone(),
@@ -59,18 +57,15 @@ pub async fn sell_by_percent(
     rpc: Arc<SolanaRpcClient>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     percent: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
     if percent == 0 || percent > 100 {
         return Err(anyhow!("Percentage must be between 1 and 100"));
@@ -81,17 +76,15 @@ pub async fn sell_by_percent(
         rpc,
         payer,
         mint,
-        creator,
+        virtual_base,
+        virtual_quote,
+        real_base_before,
+        real_quote_before,
         Some(amount),
         slippage_basis_points,
         priority_fee,
         lookup_table_key,
         recent_blockhash,
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
     )
     .await
 }
@@ -101,34 +94,29 @@ pub async fn sell_by_amount(
     rpc: Arc<SolanaRpcClient>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     amount: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
     sell(
         rpc,
         payer,
         mint,
-        creator,
+        virtual_base,
+        virtual_quote,
+        real_base_before,
+        real_quote_before,
         Some(amount),
         slippage_basis_points,
         priority_fee,
         lookup_table_key,
         recent_blockhash,
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
     )
     .await
 }
@@ -139,27 +127,23 @@ pub async fn sell_with_tip(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     amount_token: Option<u64>,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
-    let executor = TradeFactory::create_executor(Protocol::PumpSwap);
+    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
     // 创建PumpFun协议参数
-    let protocol_params = Box::new(PumpSwapParams {
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
+    let protocol_params = Box::new(RaydiumLaunchpadParams {
+        virtual_base: Some(virtual_base),
+        virtual_quote: Some(virtual_quote),
+        real_base_before: Some(real_base_before),
+        real_quote_before: Some(real_quote_before),
         auto_handle_wsol: true,
     });
     // 创建卖出参数
@@ -167,7 +151,7 @@ pub async fn sell_with_tip(
         rpc: Some(rpc.clone()),
         payer: payer.clone(),
         mint,
-        creator,
+        creator: Pubkey::default(),
         amount_token: amount_token,
         slippage_basis_points: slippage_basis_points,
         priority_fee: priority_fee.clone(),
@@ -187,18 +171,15 @@ pub async fn sell_by_percent_with_tip(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     percent: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
     if percent == 0 || percent > 100 {
         return Err(anyhow!("Percentage must be between 1 and 100"));
@@ -211,17 +192,15 @@ pub async fn sell_by_percent_with_tip(
         swqos_clients,
         payer,
         mint,
-        creator,
+        virtual_base,
+        virtual_quote,
+        real_base_before,
+        real_quote_before,
         Some(amount),
         slippage_basis_points,
         priority_fee,
         lookup_table_key,
         recent_blockhash,
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
     )
     .await
 }
@@ -232,35 +211,30 @@ pub async fn sell_by_amount_with_tip(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
-    creator: Pubkey,
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base_before: u128,
+    real_quote_before: u128,
     amount: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
-    // 可选（必须全部传）
-    pool: Option<Pubkey>,
-    pool_base_token_account: Option<Pubkey>,
-    pool_quote_token_account: Option<Pubkey>,
-    user_base_token_account: Option<Pubkey>,
-    user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
     sell_with_tip(
         rpc,
         swqos_clients,
         payer,
         mint,
-        creator,
+        virtual_base,
+        virtual_quote,
+        real_base_before,
+        real_quote_before,
         Some(amount),
         slippage_basis_points,
         priority_fee,
         lookup_table_key,
         recent_blockhash,
-        pool,
-        pool_base_token_account,
-        pool_quote_token_account,
-        user_base_token_account,
-        user_quote_token_account,
     )
     .await
 }

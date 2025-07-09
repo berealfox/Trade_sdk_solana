@@ -1,32 +1,156 @@
-//! Instructions for interacting with the Pump.fun program.
-//!
-//! This module contains instruction builders for creating Solana instructions to interact with the
-//! Pump.fun program. Each function takes the required accounts and instruction data and returns a
-//! properly formatted Solana instruction.
-//!
-//! # Instructions
-//!
-//! - `create`: Instruction to create a new token with an associated bonding curve.
-//! - `buy`: Instruction to buy tokens from a bonding curve by providing SOL.
-//! - `sell`: Instruction to sell tokens back to the bonding curve in exchange for SOL.
-use crate::{
-    constants, 
-    trading::pumpfun::common::{
-        get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda
-    },
+use anyhow::{anyhow, Result};
+use solana_sdk::{
+    instruction::Instruction, native_token::sol_to_lamports,
 };
-use spl_associated_token_account::get_associated_token_address;
+use spl_associated_token_account::{
+    get_associated_token_address, instruction::create_associated_token_account,
+};
+use spl_token::instruction::close_account;
+
+use crate::{
+    constants, trading::pumpfun::common::{
+        get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda
+    }
+};
 
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
+    instruction::AccountMeta,
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
 };
 
-pub mod pumpfun;
-pub mod pumpswap;
-pub mod bonk;
+use crate::{
+    constants::pumpfun::{global_constants::FEE_RECIPIENT, trade::DEFAULT_SLIPPAGE},
+    trading::pumpfun::common::{
+        calculate_with_slippage_buy, get_buy_token_amount_from_sol_amount, get_creator_vault_pda,
+    },
+    trading::core::{
+        params::{BuyParams, PumpFunParams, SellParams},
+        traits::InstructionBuilder,
+    },
+};
+
+/// PumpFun协议的指令构建器
+pub struct PumpFunInstructionBuilder;
+
+#[async_trait::async_trait]
+impl InstructionBuilder for PumpFunInstructionBuilder {
+    async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
+        // 获取PumpFun特定参数
+        let protocol_params = params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunParams>()
+            .ok_or_else(|| anyhow!("Invalid protocol params for PumpFun"))?;
+
+        if params.amount_sol == 0 {
+            return Err(anyhow!("Amount cannot be zero"));
+        }
+
+        let bonding_curve = if protocol_params.bonding_curve.is_some() {
+            protocol_params.bonding_curve.clone().unwrap()
+        } else {
+            return Err(anyhow!("Bonding curve not found"));
+        };
+
+        let max_sol_cost = calculate_with_slippage_buy(
+            params.amount_sol,
+            params
+                .slippage_basis_points
+                .unwrap_or(DEFAULT_SLIPPAGE),
+        );
+        let creator_vault_pda = bonding_curve.get_creator_vault_pda();
+
+        let mut buy_token_amount =
+            get_buy_token_amount_from_sol_amount(&bonding_curve, params.amount_sol);
+        if buy_token_amount <= 100 * 1_000_000_u64 {
+            buy_token_amount = if max_sol_cost > sol_to_lamports(0.01) {
+                25547619 * 1_000_000_u64
+            } else {
+                255476 * 1_000_000_u64
+            };
+        }
+
+        let mut instructions = vec![];
+
+        // 创建关联代币账户
+        instructions.push(create_associated_token_account(
+            &params.payer.pubkey(),
+            &params.payer.pubkey(),
+            &params.mint,
+            &constants::pumpfun::accounts::TOKEN_PROGRAM,
+        ));
+
+        // 创建买入指令
+        instructions.push(buy(
+            params.payer.as_ref(),
+            &params.mint,
+            &bonding_curve.account,
+            &creator_vault_pda,
+            &FEE_RECIPIENT,
+            Buy {
+                _amount: buy_token_amount,
+                _max_sol_cost: max_sol_cost,
+            },
+        ));
+
+        Ok(instructions)
+    }
+
+    async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        let amount_token = if let Some(amount) = params.amount_token {
+            if amount == 0 {
+                return Err(anyhow!("Amount cannot be zero"));
+            }
+            amount
+        } else {
+            return Err(anyhow!("Amount token is required"));
+        };
+        let creator_vault_pda = get_creator_vault_pda(&params.creator).unwrap();
+        let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
+
+        // 获取代币余额
+        let balance_u64 = if let Some(rpc) = &params.rpc {
+            let balance = rpc.get_token_account_balance(&ata).await?;
+            balance
+                .amount
+                .parse::<u64>()
+                .map_err(|_| anyhow!("Failed to parse token balance"))?
+        } else {
+            return Err(anyhow!("RPC client is required to get token balance"));
+        };
+
+        let mut amount_token = amount_token;
+        if amount_token > balance_u64 {
+            amount_token = balance_u64;
+        }
+
+        let mut instructions = vec![sell(
+            params.payer.as_ref(),
+            &params.mint,
+            &creator_vault_pda,
+            &FEE_RECIPIENT,
+            Sell {
+                _amount: amount_token,
+                _min_sol_output: 1,
+            },
+        )];
+
+        // 如果卖出全部代币，关闭账户
+        if amount_token >= balance_u64 {
+            instructions.push(close_account(
+                &spl_token::ID,
+                &ata,
+                &params.payer.pubkey(),
+                &params.payer.pubkey(),
+                &[&params.payer.pubkey()],
+            )?);
+        }
+
+        Ok(instructions)
+    }
+}
 
 pub struct Create {
     pub _name: String,
@@ -90,20 +214,6 @@ impl Sell {
     }
 }
 
-
-/// Creates an instruction to create a new token with bonding curve
-///
-/// Creates a new SPL token with an associated bonding curve that determines its price.
-///
-/// # Arguments
-///
-/// * `payer` - Keypair that will pay for account creation and transaction fees
-/// * `mint` - Keypair for the new token mint account that will be created
-/// * `args` - Create instruction data containing token name, symbol and metadata URI
-///
-/// # Returns
-///
-/// Returns a Solana instruction that when executed will create the token and its accounts
 pub fn create(payer: &Keypair, mint: &Keypair, args: Create) -> Instruction {
     let bonding_curve: Pubkey = get_bonding_curve_pda(&mint.pubkey()).unwrap();
     Instruction::new_with_bytes(
@@ -131,22 +241,6 @@ pub fn create(payer: &Keypair, mint: &Keypair, args: Create) -> Instruction {
     )
 }
 
-/// Creates an instruction to buy tokens from a bonding curve
-///
-/// Buys tokens by providing SOL. The amount of tokens received is calculated based on
-/// the bonding curve formula. A portion of the SOL is taken as a fee and sent to the
-/// fee recipient account.
-///
-/// # Arguments
-///
-/// * `payer` - Keypair that will provide the SOL to buy tokens
-/// * `mint` - Public key of the token mint to buy
-/// * `fee_recipient` - Public key of the account that will receive the transaction fee
-/// * `args` - Buy instruction data containing the SOL amount and maximum acceptable token price
-///
-/// # Returns
-///
-/// Returns a Solana instruction that when executed will buy tokens from the bonding curve
 pub fn buy(
     payer: &Keypair,
     mint: &Pubkey,
@@ -175,22 +269,6 @@ pub fn buy(
     )
 }
 
-/// Creates an instruction to sell tokens back to a bonding curve
-///
-/// Sells tokens back to the bonding curve in exchange for SOL. The amount of SOL received
-/// is calculated based on the bonding curve formula. A portion of the SOL is taken as
-/// a fee and sent to the fee recipient account.
-///
-/// # Arguments
-///
-/// * `payer` - Keypair that owns the tokens to sell
-/// * `mint` - Public key of the token mint to sell
-/// * `fee_recipient` - Public key of the account that will receive the transaction fee
-/// * `args` - Sell instruction data containing token amount and minimum acceptable SOL output
-///
-/// # Returns
-///
-/// Returns a Solana instruction that when executed will sell tokens to the bonding curve
 pub fn sell(
     payer: &Keypair,
     mint: &Pubkey,
@@ -218,4 +296,3 @@ pub fn sell(
         ],
     )
 }
-

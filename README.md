@@ -1,4 +1,4 @@
-# Fake Git History
+# Git History
 A Python script to generate a fake Git repository history with random commit messages and commit dates. Script is in basic version, to show how to easily make looks your github like you commit a lot, in case of dumb recruitments requirements
 
 # Usage

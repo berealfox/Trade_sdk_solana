@@ -1,8 +1,3 @@
-# Sol Trade SDK
-[中文](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README.md) | [Telegram](https://t.me/fnzero_group)
-
-A comprehensive Rust SDK for seamless interaction with Solana DEX trading programs. This SDK provides a robust set of tools and interfaces to integrate PumpFun, PumpSwap, and Bonk functionality into your applications.
-
 ## Project Features
 
 1. **PumpFun Trading**: Support for `buy` and `sell` operations
@@ -26,7 +21,7 @@ Clone this project to your project directory:
 
 ```bash
 cd your_project_root_directory
-git clone https://github.com/0xfnzero/sol-trade-sdk
+git clone https://github.com/berealfox/sol-trade-sdk
 ```
 
 Add the dependency to your `Cargo.toml`:
@@ -78,7 +73,7 @@ Please ensure that the parameters your trading logic depends on are available in
 
 ### 1. Event Subscription - Monitor Token Trading
 
-See the example code in [examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs).
+See the example code in [examples/event_subscription](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs).
 
 Run the example code:
 ```bash
@@ -103,7 +98,7 @@ When using multiple MEV services, you need to use `Durable Nonce`. You need to i
 
 #### 2.2 Creating SolanaTrade Instance
 
-See the example code in [examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs).
+See the example code in [examples/trading_client](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs).
 
 Run the example code:
 ```bash
@@ -114,7 +109,7 @@ cargo run --package trading_client
 
 #### 3.1 Sniping
 
-See the example code in [examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs).
+See the example code in [examples/pumpfun_sniper_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -123,7 +118,7 @@ cargo run --package pumpfun_sniper_trading
 
 #### 3.2 Copy Trading
 
-See the example code in [examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs).
+See the example code in [examples/pumpfun_copy_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -132,7 +127,7 @@ cargo run --package pumpfun_copy_trading
 
 ### 4. PumpSwap Trading Operations
 
-See the example code in [examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs).
+See the example code in [examples/pumpswap_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -141,7 +136,7 @@ cargo run --package pumpswap_trading
 
 ### 5. Raydium CPMM Trading Operations
 
-See the example code in [examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs).
+See the example code in [examples/raydium_cpmm_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -150,7 +145,7 @@ cargo run --package raydium_cpmm_trading
 
 ### 6. Raydium AMM V4 Trading Operations
 
-See the example code in [examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs).
+See the example code in [examples/raydium_amm_v4_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -161,7 +156,7 @@ cargo run --package raydium_amm_v4_trading
 
 #### 7.1 Sniping
 
-See the example code in [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs).
+See the example code in [examples/bonk_sniper_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -170,7 +165,7 @@ cargo run --package bonk_sniper_trading
 
 #### 7.2 Copy Trading
 
-See the example code in [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs).
+See the example code in [examples/bonk_copy_trading](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs).
 
 Run the example code:
 ```bash
@@ -181,7 +176,7 @@ cargo run --package bonk_copy_trading
 
 The SDK provides a powerful middleware system that allows you to modify, add, or remove instructions before transaction execution. This gives you tremendous flexibility to customize trading behavior.
 
-See the example code in [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs).
+See the example code in [examples/middleware_system](https://github.com/berealfox/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs).
 
 Run the example code:
 ```bash
@@ -330,7 +325,7 @@ MIT License
 
 ## Contact
 
-- Project Repository: https://github.com/0xfnzero/sol-trade-sdk
+- Project Repository: https://github.com/berealfox/sol-trade-sdk
 - Telegram Group: https://t.me/fnzero_group
 
 ## Important Notes
